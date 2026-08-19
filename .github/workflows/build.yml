@@ -8,13 +8,22 @@ jobs:
       - name: Clonar mi app
         uses: actions/checkout@v4
 
-      - name: Instalar XcodeGen y dependencias
+      - name: Instalar dependencias base
         run: |
-          brew install xcodegen ldid dpkg make optool
+          brew install xcodegen ldid dpkg make
           echo "/opt/homebrew/opt/make/libexec/gnubin" >> $GITHUB_PATH
           git clone --recursive https://github.com/theos/theos.git $HOME/theos
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
           echo "$HOME/theos/bin" >> $GITHUB_PATH
+
+      - name: Compilar e instalar optool manualmente
+        run: |
+          git clone https://github.com/alexzielenski/optool.git
+          cd optool
+          make
+          cp optool /usr/local/bin/optool
+          chmod +x /usr/local/bin/optool
+          cd ..
 
       - name: Generar proyecto Xcode con XcodeGen
         run: xcodegen generate
@@ -31,17 +40,21 @@ jobs:
 
       - name: Compilar Mi App
         run: |
-          xcodebuild clean build             -project MiApp.xcodeproj             -scheme MiApp             -configuration Release             -sdk iphoneos             CODE_SIGNING_ALLOWED=NO             CODE_SIGN_IDENTITY=""
+          xcodebuild clean build \
+            -project MiApp.xcodeproj \
+            -scheme MiApp \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=""
 
       - name: Empaquetar Mi App con el motor
         run: |
           mkdir -p Payload
           cp -r build/Release-iphoneos/MiApp.app Payload/
           
-          # Copiar el motor (dylib) dentro de la app
           cp motor_filza/.theos/obj/*.dylib Payload/MiApp.app/
           
-          # Detectar el nombre exacto del dylib e inyectarlo
           DYLIB_NAME=$(ls motor_filza/.theos/obj/*.dylib | head -n 1 | xargs basename)
           echo "Inyectando: $DYLIB_NAME"
           optool install -c load -p "@executable_path/$DYLIB_NAME" -t Payload/MiApp.app/MiApp
