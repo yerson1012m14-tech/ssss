@@ -3,9 +3,10 @@
 #import <string.h>
 #import <dlfcn.h>
 
-@interface ViewController ()
+@interface ViewController () <UITextFieldDelegate>
 @property (nonatomic, strong) UITextView *logView;
 @property (nonatomic, strong) UITextField *campo;
+@property (nonatomic, assign) BOOL motorOn;
 @end
 
 @implementation ViewController
@@ -16,13 +17,15 @@
     self.title = @"Mi File Manager";
 
     self.campo = [[UITextField alloc] init];
-    self.campo.placeholder = @"com.ejemplo.app (bundle id)";
+    self.campo.placeholder = @"com.ejemplo.app y pulsa return";
     self.campo.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
     self.campo.textColor = [UIColor whiteColor];
     self.campo.font = [UIFont fontWithName:@"Menlo" size:12];
     self.campo.layer.cornerRadius = 6;
     self.campo.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.campo.autocorrectionType = UITextAutocorrectionTypeNo;
+    self.campo.returnKeyType = UIReturnKeyDone;
+    self.campo.delegate = self;
     UIView *pad = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 8)];
     self.campo.leftView = pad;
     self.campo.leftViewMode = UITextFieldViewModeAlways;
@@ -38,7 +41,7 @@
     [self.view addSubview:self.logView];
 
     UIButton *btn1 = [self boton:@"1. ARRANCAR MOTOR" accion:@selector(arrancarMotor)];
-    UIButton *btn2 = [self boton:@"2. Probar apps conocidas" accion:@selector(probarConocidas)];
+    UIButton *btn2 = [self boton:@"2. Probar apps del sistema" accion:@selector(probarSistema)];
     UIButton *btn3 = [self boton:@"3. Abrir ID escrito" accion:@selector(abrirEscrito)];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -64,7 +67,10 @@
         [self.logView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10]
     ]];
 
-    [self log:@"App V8. Pulsa 1 y luego 2."];
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cerrarTeclado)];
+    [self.view addGestureRecognizer:tap];
+
+    [self log:@"App V9. Escribe un ID y pulsa return."];
 }
 
 - (UIButton *)boton:(NSString *)titulo accion:(SEL)accion {
@@ -76,6 +82,19 @@
     [b addTarget:self action:accion forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:b];
     return b;
+}
+
+- (void)cerrarTeclado { [self.view endEditing:YES]; }
+
+- (BOOL)textFieldShouldReturn:(UITextField *)tf {
+    [tf resignFirstResponder];
+    [self asegurarMotor];
+    [self abrirEscrito];
+    return YES;
+}
+
+- (void)asegurarMotor {
+    if (!self.motorOn) { [self arrancarMotor]; self.motorOn = YES; }
 }
 
 - (void)log:(NSString *)texto {
@@ -95,17 +114,15 @@
     [self log:@"Motor arrancado."];
 }
 
-- (void)probarConocidas {
-    [self log:@"--- Apps conocidas ---"];
+- (void)probarSistema {
+    [self log:@"--- Apps del sistema ---"];
+    [self asegurarMotor];
     NSArray *ids = @[
-        @"com.instagram.instagram",
-        @"net.whatsapp.WhatsApp",
-        @"com.zhiliaoapp.musically",
-        @"com.spotify.client",
-        @"com.facebook.Facebook",
-        @"com.snapchat.snapchat",
-        @"ru.keepcoder.Telegram",
-        @"com.apple.mobilesafari"
+        @"com.apple.mobilesafari",
+        @"com.apple.mobileslideshow",
+        @"com.apple.mobilemail",
+        @"com.apple.music",
+        @"com.apple.Preferences"
     ];
     for (NSString *bid in ids) [self abrirContenedor:bid];
 }
