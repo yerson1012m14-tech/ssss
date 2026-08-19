@@ -20,9 +20,9 @@ jobs:
         run: |
           git clone https://github.com/Tyilo/insert_dylib.git
           cd insert_dylib
-          clang insert_dylib/main.c -o insert_dylib
-          cp insert_dylib /usr/local/bin/insert_dylib
-          chmod +x /usr/local/bin/insert_dylib
+          clang insert_dylib/main.c -o insert_dylib_tool
+          sudo cp insert_dylib_tool /usr/local/bin/insert_dylib
+          sudo chmod +x /usr/local/bin/insert_dylib
           cd ..
 
       - name: Generar proyecto Xcode con XcodeGen
@@ -58,7 +58,6 @@ jobs:
           DYLIB_NAME=$(ls motor_filza/.theos/obj/*.dylib | head -n 1 | xargs basename)
           echo "Inyectando: $DYLIB_NAME"
           
-          # Inyectar el motor y quitar la firma vieja (GBox la re-firmara)
           insert_dylib --strip-codesig --all-yes "@executable_path/$DYLIB_NAME" Payload/MiApp.app/MiApp Payload/MiApp.app/MiApp_patched
           mv Payload/MiApp.app/MiApp_patched Payload/MiApp.app/MiApp
           
