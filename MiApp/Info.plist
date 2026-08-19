@@ -7,7 +7,7 @@
     <key>CFBundleName</key>
     <string>MiApp</string>
     <key>CFBundleDisplayName</key>
-    <string>MiApp V3</string>
+    <string>MiApp V4</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundlePackageType</key>
