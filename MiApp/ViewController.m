@@ -82,9 +82,9 @@ static NSString *containerPath(NSString *bid) {
     UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"c" forIndexPath:ip];
     c.backgroundColor = [UIColor blackColor];
     NSString *n = self.items[ip.row];
-    BOOL esDir = [n isEqualToString:@".."] || ![[n pathExtension].length boolValue] && [self esDir:n];
+    BOOL esDir = [n isEqualToString:@".."] || [self esDir:n];
     c.textLabel.text = n;
-    c.textLabel.textColor = [self esDir:n] || [n isEqualToString:@".."] ? [UIColor cyanColor] : [UIColor lightGrayColor];
+    c.textLabel.textColor = esDir ? [UIColor cyanColor] : [UIColor lightGrayColor];
     c.textLabel.font = [UIFont fontWithName:@"Menlo" size:12];
     return c;
 }
@@ -153,7 +153,6 @@ static NSString *containerPath(NSString *bid) {
 
 - (void)cargarApps {
     NSMutableOrderedSet *set = [NSMutableOrderedSet new];
-    // Descubrimiento real: apps instaladas segun el sistema
     Class ws = NSClassFromString(@"LSApplicationWorkspace");
     if (ws) {
         id workspace = [ws performSelector:@selector(defaultWorkspace)];
@@ -163,7 +162,6 @@ static NSString *containerPath(NSString *bid) {
             if (bid && ![bid hasPrefix:@"com.apple."]) [set addObject:bid];
         }
     }
-    // Refuerzo: populares por si el sistema oculta alguna
     NSArray *pop = @[@"com.google.ios.youtube", @"net.whatsapp.WhatsApp", @"com.instagram.instagram",
                      @"com.zhiliaoapp.musically", @"com.spotify.client", @"com.facebook.Facebook",
                      @"com.snapchat.snapchat", @"ru.keepcoder.Telegram"];
@@ -200,7 +198,7 @@ static NSString *containerPath(NSString *bid) {
     NSString *p = containerPath(bid);
     if (!p) {
         UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Sin contenedor"
-            message:[NSString stringWithFormat:@"%@ no devolvio ruta (¿instalada?)", bid]
+            message:[NSString stringWithFormat:@"%@ no devolvio ruta (no instalada?)", bid]
             preferredStyle:UIAlertControllerStyleAlert];
         [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:a animated:YES completion:nil];
@@ -208,7 +206,6 @@ static NSString *containerPath(NSString *bid) {
     }
     FileBrowserVC *fb = [FileBrowserVC new];
     fb.ruta = p;
-    fb.title = bid;
     [self.navigationController pushViewController:fb animated:YES];
 }
 
