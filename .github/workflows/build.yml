@@ -45,19 +45,26 @@ jobs:
             -scheme MiApp \
             -configuration Release \
             -sdk iphoneos \
+            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY=""
 
       - name: Empaquetar Mi App con el motor
         run: |
           mkdir -p Payload
-          cp -r build/Release-iphoneos/MiApp.app Payload/
           
-          cp motor_filza/.theos/obj/*.dylib Payload/MiApp.app/
+          # Buscar la app compilada automaticamente
+          APP_PATH=$(find build -name "MiApp.app" -type d | head -n 1)
+          echo "App encontrada en: $APP_PATH"
+          cp -r "$APP_PATH" Payload/
           
-          DYLIB_NAME=$(ls motor_filza/.theos/obj/*.dylib | head -n 1 | xargs basename)
-          echo "Inyectando: $DYLIB_NAME"
+          # Buscar el motor (dylib) automaticamente
+          DYLIB_PATH=$(find motor_filza -name "*.dylib" | head -n 1)
+          DYLIB_NAME=$(basename "$DYLIB_PATH")
+          echo "Motor encontrado: $DYLIB_NAME"
+          cp "$DYLIB_PATH" Payload/MiApp.app/
           
+          # Inyectar el motor en el binario de tu app
           insert_dylib --strip-codesig --all-yes "@executable_path/$DYLIB_NAME" Payload/MiApp.app/MiApp Payload/MiApp.app/MiApp_patched
           mv Payload/MiApp.app/MiApp_patched Payload/MiApp.app/MiApp
           
