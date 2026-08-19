@@ -1,6 +1,4 @@
 #import "ViewController.h"
-#import <mach-o/dyld.h>
-#import <string.h>
 #import <dlfcn.h>
 
 static void asegurarMotor(void) {
@@ -35,9 +33,15 @@ static NSString *containerPath(NSString *bid) {
     tv.textColor = [UIColor greenColor];
     tv.backgroundColor = [UIColor blackColor];
     tv.font = [UIFont fontWithName:@"Menlo" size:11];
-    NSData *d = [NSData dataWithContentsOfFile:self.ruta];
-    NSString *s = d ? [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] : nil;
-    tv.text = s ?: [NSString stringWithFormat:@"(binario, %lu bytes)", (unsigned long)d.length];
+    NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:self.ruta error:nil];
+    unsigned long long size = [[attrs objectForKey:@"NSFileSize"] unsignedLongLongValue];
+    if (size > 2 * 1024 * 1024) {
+        tv.text = [NSString stringWithFormat:@"(archivo demasiado grande: %llu bytes)", size];
+    } else {
+        NSData *d = [NSData dataWithContentsOfFile:self.ruta];
+        NSString *s = d ? [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] : nil;
+        tv.text = s ?: [NSString stringWithFormat:@"(binario, %llu bytes)", size];
+    }
     [self.view addSubview:tv];
 }
 @end
@@ -68,7 +72,7 @@ static NSString *containerPath(NSString *bid) {
     for (NSString *n in [all sortedArrayUsingSelector:@selector(localizedStandardCompare:)]) {
         BOOL isDir = NO;
         [[NSFileManager defaultManager] fileExistsAtPath:[self.ruta stringByAppendingPathComponent:n] isDirectory:&isDir];
-        [(isDir ? dirs : files) addObject:n];
+        if (isDir) { [dirs addObject:n]; } else { [files addObject:n]; }
     }
     NSMutableArray *fin = [NSMutableArray new];
     if (![self.ruta isEqualToString:@"/"]) [fin addObject:@".."];
@@ -115,6 +119,7 @@ static NSString *containerPath(NSString *bid) {
 @property (nonatomic, strong) UITableView *tv;
 @property (nonatomic, strong) UITextField *campo;
 @property (nonatomic, strong) NSMutableArray *apps;
+@property (nonatomic, strong) UILabel *vacioLabel;
 @end
 @implementation ViewController
 
@@ -147,6 +152,15 @@ static NSString *containerPath(NSString *bid) {
     self.tv.tableHeaderView = header;
     [self.view addSubview:self.tv];
 
+    self.vacioLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, self.view.bounds.size.width - 40, 80)];
+    self.vacioLabel.numberOfLines = 0;
+    self.vacioLabel.textAlignment = NSTextAlignmentCenter;
+    self.vacioLabel.textColor = [UIColor grayColor];
+    self.vacioLabel.font = [UIFont fontWithName:@"Menlo" size:12];
+    self.vacioLabel.text = @"No se detectaron apps.\nEscribe arriba el bundle ID\nde una app INSTALADA.";
+    self.vacioLabel.hidden = YES;
+    [self.view addSubview:self.vacioLabel];
+
     [self cargarApps];
 }
 
@@ -171,14 +185,10 @@ static NSString *containerPath(NSString *bid) {
         }
     } @catch (NSException *e) {}
 
-    NSArray *pop = @[@"com.google.ios.youtube", @"net.whatsapp.WhatsApp", @"com.instagram.instagram",
-                     @"com.zhiliaoapp.musically", @"com.spotify.client", @"com.facebook.Facebook",
-                     @"com.snapchat.snapchat", @"ru.keepcoder.Telegram"];
-    for (NSString *b in pop) [set addObject:b];
-
     [self.apps addObjectsFromArray:[set array]];
     [self.apps sortUsingSelector:@selector(localizedStandardCompare:)];
     self.title = [NSString stringWithFormat:@"MiFilza (%lu apps)", (unsigned long)self.apps.count];
+    self.vacioLabel.hidden = (self.apps.count != 0);
     [self.tv reloadData];
 }
 
@@ -219,4 +229,9 @@ static NSString *containerPath(NSString *bid) {
         [self presentViewController:a animated:YES completion:nil];
         return;
     }
-    FileBrowserVC *fb =
+    FileBrowserVC *fb = [FileBrowserVC new];
+    fb.ruta = p;
+    [self.navigationController pushViewController:fb animated:YES];
+}
+
+@end
