@@ -18,6 +18,21 @@ static NSString *containerPath(NSString *bid) {
     return dataPath ? dataPath(bid) : nil;
 }
 
+static NSString *fmtSize(unsigned long long b) {
+    if (b < 1024) return [NSString stringWithFormat:@"%llu B", b];
+    if (b < 1024 * 1024) return [NSString stringWithFormat:@"%.1f KB", b / 1024.0];
+    if (b < 1024 * 1024 * 1024) return [NSString stringWithFormat:@"%.1f MB", b / (1024.0 * 1024.0)];
+    return [NSString stringWithFormat:@"%.2f GB", b / (1024.0 * 1024.0 * 1024.0)];
+}
+
+static void ponerIcono(UITableViewCell *c, NSString *nombre, UIColor *tinte) {
+    c.imageView.image = [[UIImage systemImageNamed:nombre] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    c.imageView.tintColor = tinte;
+}
+
+static UIColor *colorFondo(void) { return [UIColor colorWithWhite:0.05 alpha:1.0]; }
+static UIColor *acento(void) { return [UIColor colorWithRed:0.2 green:1.0 blue:0.5 alpha:1.0]; }
+
 #pragma mark - Visor de texto
 @interface TextViewVC : UIViewController
 @property (nonatomic, strong) NSString *ruta;
@@ -30,17 +45,18 @@ static NSString *containerPath(NSString *bid) {
     UITextView *tv = [[UITextView alloc] initWithFrame:self.view.bounds];
     tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     tv.editable = NO;
-    tv.textColor = [UIColor greenColor];
+    tv.textColor = acento();
     tv.backgroundColor = [UIColor blackColor];
     tv.font = [UIFont fontWithName:@"Menlo" size:11];
+    tv.contentInset = UIEdgeInsetsMake(10, 10, 10, 10);
     NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:self.ruta error:nil];
     unsigned long long size = [[attrs objectForKey:@"NSFileSize"] unsignedLongLongValue];
     if (size > 2 * 1024 * 1024) {
-        tv.text = [NSString stringWithFormat:@"(archivo demasiado grande: %llu bytes)", size];
+        tv.text = [NSString stringWithFormat:@"(archivo demasiado grande: %@)", fmtSize(size)];
     } else {
         NSData *d = [NSData dataWithContentsOfFile:self.ruta];
         NSString *s = d ? [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] : nil;
-        tv.text = s ?: [NSString stringWithFormat:@"(binario, %llu bytes)", size];
+        tv.text = s ?: [NSString stringWithFormat:@"(binario, %@)", fmtSize(size)];
     }
     [self.view addSubview:tv];
 }
@@ -55,14 +71,14 @@ static NSString *containerPath(NSString *bid) {
 @implementation FileBrowserVC
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor blackColor];
+    self.view.backgroundColor = colorFondo();
     self.title = self.ruta.lastPathComponent;
     self.tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
     self.tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.tv.backgroundColor = [UIColor blackColor];
+    self.tv.backgroundColor = colorFondo();
+    self.tv.separatorColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.tv.dataSource = self;
     self.tv.delegate = self;
-    [self.tv registerClass:[UITableViewCell class] forCellReuseIdentifier:@"c"];
     [self.view addSubview:self.tv];
     [self recargar];
 }
@@ -83,13 +99,33 @@ static NSString *containerPath(NSString *bid) {
 }
 - (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return self.items.count; }
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
-    UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"c" forIndexPath:ip];
-    c.backgroundColor = [UIColor blackColor];
+    UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"c"];
+    if (!c) c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"c"];
+    c.backgroundColor = colorFondo();
+    c.selectedBackgroundView = [UIView new];
+    c.selectedBackgroundView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
     NSString *n = self.items[ip.row];
-    BOOL esDir = [n isEqualToString:@".."] || [self esDir:n];
     c.textLabel.text = n;
-    c.textLabel.textColor = esDir ? [UIColor cyanColor] : [UIColor lightGrayColor];
-    c.textLabel.font = [UIFont fontWithName:@"Menlo" size:12];
+    c.textLabel.font = [UIFont fontWithName:@"Menlo" size:13];
+    c.detailTextLabel.font = [UIFont fontWithName:@"Menlo" size:10];
+    c.detailTextLabel.textColor = [UIColor grayColor];
+    if ([n isEqualToString:@".."]) {
+        ponerIcono(c, @"arrow.uturn.left", [UIColor grayColor]);
+        c.textLabel.textColor = [UIColor grayColor];
+        c.detailTextLabel.text = @"subir";
+        c.accessoryType = UITableViewCellAccessoryNone;
+    } else if ([self esDir:n]) {
+        ponerIcono(c, @"folder.fill", [UIColor cyanColor]);
+        c.textLabel.textColor = [UIColor cyanColor];
+        c.detailTextLabel.text = @"carpeta";
+        c.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    } else {
+        ponerIcono(c, @"doc.fill", [UIColor lightGrayColor]);
+        c.textLabel.textColor = [UIColor whiteColor];
+        NSDictionary *a = [[NSFileManager defaultManager] attributesOfItemAtPath:[self.ruta stringByAppendingPathComponent:n] error:nil];
+        c.detailTextLabel.text = fmtSize([[a objectForKey:@"NSFileSize"] unsignedLongLongValue]);
+        c.accessoryType = UITableViewCellAccessoryNone;
+    }
     return c;
 }
 - (BOOL)esDir:(NSString *)n {
@@ -125,34 +161,42 @@ static NSString *containerPath(NSString *bid) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor blackColor];
+    self.view.backgroundColor = colorFondo();
     self.title = @"MiFilza";
 
     self.apps = [NSMutableArray new];
     self.tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
     self.tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.tv.backgroundColor = [UIColor blackColor];
+    self.tv.backgroundColor = colorFondo();
+    self.tv.separatorColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.tv.dataSource = self;
     self.tv.delegate = self;
-    [self.tv registerClass:[UITableViewCell class] forCellReuseIdentifier:@"c"];
 
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 44)];
-    header.backgroundColor = [UIColor blackColor];
-    self.campo = [[UITextField alloc] initWithFrame:CGRectMake(10, 4, header.bounds.size.width - 20, 36)];
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 50)];
+    header.backgroundColor = colorFondo();
+    self.campo = [[UITextField alloc] initWithFrame:CGRectMake(12, 7, header.bounds.size.width - 24, 36)];
     self.campo.placeholder = @"bundle id manual + return";
-    self.campo.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    self.campo.backgroundColor = [UIColor colorWithWhite:0.12 alpha:1.0];
+    self.campo.layer.cornerRadius = 10;
+    self.campo.layer.borderWidth = 1;
+    self.campo.layer.borderColor = [UIColor colorWithWhite:0.25 alpha:1.0].CGColor;
     self.campo.textColor = [UIColor whiteColor];
     self.campo.font = [UIFont fontWithName:@"Menlo" size:12];
-    self.campo.layer.cornerRadius = 6;
     self.campo.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.campo.autocorrectionType = UITextAutocorrectionTypeNo;
     self.campo.returnKeyType = UIReturnKeyDone;
     self.campo.delegate = self;
+    UIImageView *lupa = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 24, 20)];
+    lupa.image = [[UIImage systemImageNamed:@"magnifyingglass"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    lupa.tintColor = [UIColor grayColor];
+    lupa.contentMode = UIViewContentModeCenter;
+    self.campo.leftView = lupa;
+    self.campo.leftViewMode = UITextFieldViewModeAlways;
     [header addSubview:self.campo];
     self.tv.tableHeaderView = header;
     [self.view addSubview:self.tv];
 
-    self.vacioLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 100, self.view.bounds.size.width - 40, 80)];
+    self.vacioLabel = [[UILabel alloc] initWithFrame:CGRectMake(30, 120, self.view.bounds.size.width - 60, 90)];
     self.vacioLabel.numberOfLines = 0;
     self.vacioLabel.textAlignment = NSTextAlignmentCenter;
     self.vacioLabel.textColor = [UIColor grayColor];
@@ -166,7 +210,6 @@ static NSString *containerPath(NSString *bid) {
 
 - (void)cargarApps {
     NSMutableOrderedSet *set = [NSMutableOrderedSet new];
-
     @try {
         Class ws = NSClassFromString(@"LSApplicationWorkspace");
         if (ws && [ws respondsToSelector:@selector(defaultWorkspace)]) {
@@ -187,7 +230,7 @@ static NSString *containerPath(NSString *bid) {
 
     [self.apps addObjectsFromArray:[set array]];
     [self.apps sortUsingSelector:@selector(localizedStandardCompare:)];
-    self.title = [NSString stringWithFormat:@"MiFilza (%lu apps)", (unsigned long)self.apps.count];
+    self.title = [NSString stringWithFormat:@"MiFilza (%lu)", (unsigned long)self.apps.count];
     self.vacioLabel.hidden = (self.apps.count != 0);
     [self.tv reloadData];
 }
@@ -200,11 +243,19 @@ static NSString *containerPath(NSString *bid) {
 
 - (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return self.apps.count; }
 - (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
-    UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"c" forIndexPath:ip];
-    c.backgroundColor = [UIColor blackColor];
+    UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"a"];
+    if (!c) c = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"a"];
+    c.backgroundColor = colorFondo();
+    c.selectedBackgroundView = [UIView new];
+    c.selectedBackgroundView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
     c.textLabel.text = self.apps[ip.row];
-    c.textLabel.textColor = [UIColor greenColor];
-    c.textLabel.font = [UIFont fontWithName:@"Menlo" size:12];
+    c.textLabel.textColor = acento();
+    c.textLabel.font = [UIFont fontWithName:@"Menlo" size:13];
+    c.detailTextLabel.text = @"toca para explorar";
+    c.detailTextLabel.textColor = [UIColor grayColor];
+    c.detailTextLabel.font = [UIFont fontWithName:@"Menlo" size:10];
+    ponerIcono(c, @"app.fill", acento());
+    c.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     return c;
 }
 - (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip {
@@ -215,12 +266,9 @@ static NSString *containerPath(NSString *bid) {
 - (void)abrirContenedor:(NSString *)bid {
     bid = [bid stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (!bid.length) return;
-
     asegurarMotor();
-
     NSString *p = nil;
     @try { p = containerPath(bid); } @catch (NSException *e) { p = nil; }
-
     if (!p) {
         UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Sin contenedor"
             message:[NSString stringWithFormat:@"%@ no devolvio ruta (no instalada?)", bid]
