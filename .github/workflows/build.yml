@@ -16,13 +16,13 @@ jobs:
           echo "THEOS=$HOME/theos" >> $GITHUB_ENV
           echo "$HOME/theos/bin" >> $GITHUB_PATH
 
-      - name: Compilar e instalar optool manualmente
+      - name: Compilar e instalar insert_dylib
         run: |
-          git clone https://github.com/alexzielenski/optool.git
-          cd optool
-          make
-          cp optool /usr/local/bin/optool
-          chmod +x /usr/local/bin/optool
+          git clone https://github.com/Tyilo/insert_dylib.git
+          cd insert_dylib
+          clang insert_dylib/main.c -o insert_dylib
+          cp insert_dylib /usr/local/bin/insert_dylib
+          chmod +x /usr/local/bin/insert_dylib
           cd ..
 
       - name: Generar proyecto Xcode con XcodeGen
@@ -57,7 +57,10 @@ jobs:
           
           DYLIB_NAME=$(ls motor_filza/.theos/obj/*.dylib | head -n 1 | xargs basename)
           echo "Inyectando: $DYLIB_NAME"
-          optool install -c load -p "@executable_path/$DYLIB_NAME" -t Payload/MiApp.app/MiApp
+          
+          # Inyectar el motor y quitar la firma vieja (GBox la re-firmara)
+          insert_dylib --strip-codesig --all-yes "@executable_path/$DYLIB_NAME" Payload/MiApp.app/MiApp Payload/MiApp.app/MiApp_patched
+          mv Payload/MiApp.app/MiApp_patched Payload/MiApp.app/MiApp
           
           zip -qr MiApp_ConMotor.ipa Payload/
 
