@@ -1,0 +1,6 @@
+{
+  "name": "MiFilza iOS File Manager",
+  "description": "An iOS App Container & Sandbox File Browser with dark terminal aesthetics, directory navigation, text viewer/editor, and file inspection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
