@@ -5,6 +5,7 @@
 
 @interface ViewController ()
 @property (nonatomic, strong) UITextView *logView;
+@property (nonatomic, strong) UITextField *campo;
 @end
 
 @implementation ViewController
@@ -14,6 +15,20 @@
     self.view.backgroundColor = [UIColor blackColor];
     self.title = @"Mi File Manager";
 
+    self.campo = [[UITextField alloc] init];
+    self.campo.placeholder = @"com.ejemplo.app (bundle id)";
+    self.campo.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    self.campo.textColor = [UIColor whiteColor];
+    self.campo.font = [UIFont fontWithName:@"Menlo" size:12];
+    self.campo.layer.cornerRadius = 6;
+    self.campo.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    self.campo.autocorrectionType = UITextAutocorrectionTypeNo;
+    UIView *pad = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 8)];
+    self.campo.leftView = pad;
+    self.campo.leftViewMode = UITextFieldViewModeAlways;
+    self.campo.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.campo];
+
     self.logView = [[UITextView alloc] init];
     self.logView.editable = NO;
     self.logView.textColor = [UIColor greenColor];
@@ -22,13 +37,16 @@
     self.logView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.view addSubview:self.logView];
 
-    UIButton *btn1 = [self boton:@"1. Mi sandbox" accion:@selector(verSandbox)];
-    UIButton *btn2 = [self boton:@"2. ARRANCAR MOTOR" accion:@selector(arrancarMotor)];
-    UIButton *btn3 = [self boton:@"3. LISTAR APPS" accion:@selector(listarApps)];
-    UIButton *btn4 = [self boton:@"4. Probar acceso" accion:@selector(probarAcceso)];
+    UIButton *btn1 = [self boton:@"1. ARRANCAR MOTOR" accion:@selector(arrancarMotor)];
+    UIButton *btn2 = [self boton:@"2. Probar apps conocidas" accion:@selector(probarConocidas)];
+    UIButton *btn3 = [self boton:@"3. Abrir ID escrito" accion:@selector(abrirEscrito)];
 
     [NSLayoutConstraint activateConstraints:@[
-        [btn1.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [self.campo.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [self.campo.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
+        [self.campo.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
+        [self.campo.heightAnchor constraintEqualToConstant:36],
+        [btn1.topAnchor constraintEqualToAnchor:self.campo.bottomAnchor constant:6],
         [btn1.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
         [btn1.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
         [btn1.heightAnchor constraintEqualToConstant:36],
@@ -40,17 +58,13 @@
         [btn3.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
         [btn3.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
         [btn3.heightAnchor constraintEqualToConstant:36],
-        [btn4.topAnchor constraintEqualToAnchor:btn3.bottomAnchor constant:6],
-        [btn4.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
-        [btn4.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
-        [btn4.heightAnchor constraintEqualToConstant:36],
-        [self.logView.topAnchor constraintEqualToAnchor:btn4.bottomAnchor constant:8],
+        [self.logView.topAnchor constraintEqualToAnchor:btn3.bottomAnchor constant:8],
         [self.logView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
         [self.logView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
         [self.logView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10]
     ]];
 
-    [self log:@"App V7. Pulsa 2 y luego 3."];
+    [self log:@"App V8. Pulsa 1 y luego 2."];
 }
 
 - (UIButton *)boton:(NSString *)titulo accion:(SEL)accion {
@@ -69,56 +83,50 @@
     [self.logView scrollRangeToVisible:NSMakeRange(self.logView.text.length - 1, 1)];
 }
 
-- (void)verSandbox {
-    [self log:@"--- Mi sandbox ---"];
-    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-    [self listar:docs];
-}
-
-- (void)probarAcceso {
-    [self log:@"--- Probar acceso ---"];
-    [self listar:@"/private/var/mobile/Containers/Data/Application"];
-}
-
 - (void)arrancarMotor {
     [self log:@"--- Arrancando motor ---"];
     void (*tweakInit)(void) = dlsym(RTLD_DEFAULT, "TweakInit");
     int (*start)(void) = dlsym(RTLD_DEFAULT, "MCMFilzaStart");
     void (*setUnres)(int) = dlsym(RTLD_DEFAULT, "MCMFilzaSetUnrestrictedFilesystem");
-    id (*vroot)(void) = dlsym(RTLD_DEFAULT, "MCMFilzaVirtualRoot");
-
     if (!start) { [self log:@"[!!] motor no encontrado"]; return; }
     if (tweakInit) tweakInit();
-    [self log:[NSString stringWithFormat:@"Start: %d", start()]];
+    start();
     if (setUnres) setUnres(1);
-    if (vroot) [self log:[NSString stringWithFormat:@"VirtualRoot: %@", vroot()]];
+    [self log:@"Motor arrancado."];
 }
 
-- (void)listarApps {
-    [self log:@"--- Enumerando apps ---"];
-    NSArray *(*enumIds)(int) = dlsym(RTLD_DEFAULT, "MCMEnumerateIdentifiersForClass");
+- (void)probarConocidas {
+    [self log:@"--- Apps conocidas ---"];
+    NSArray *ids = @[
+        @"com.instagram.instagram",
+        @"net.whatsapp.WhatsApp",
+        @"com.zhiliaoapp.musically",
+        @"com.spotify.client",
+        @"com.facebook.Facebook",
+        @"com.snapchat.snapchat",
+        @"ru.keepcoder.Telegram",
+        @"com.apple.mobilesafari"
+    ];
+    for (NSString *bid in ids) [self abrirContenedor:bid];
+}
+
+- (void)abrirEscrito {
+    NSString *bid = [self.campo.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    if (bid.length) [self abrirContenedor:bid];
+    else [self log:@"Escribe un bundle id primero."];
+}
+
+- (void)abrirContenedor:(NSString *)bid {
     NSString *(*dataPath)(NSString *) = dlsym(RTLD_DEFAULT, "MCMFilzaDataContainerPath");
     int (*hasLease)(NSString *) = dlsym(RTLD_DEFAULT, "MCMFilzaPathHasActiveLease");
+    if (!dataPath) { [self log:@"[!!] falta dataPath"]; return; }
 
-    if (!enumIds) { [self log:@"[!!] falta funcion de enumerar"]; return; }
-
-    NSArray *ids = enumIds(2);
-    if (![ids count]) ids = enumIds(1);
-    if (![ids count]) ids = enumIds(0);
-    [self log:[NSString stringWithFormat:@"Apps encontradas: %lu", (unsigned long)ids.count]];
-
-    int i = 0;
-    for (NSString *bid in ids) {
-        if (i++ >= 5) { [self log:@"... (mas apps ocultas)"]; break; }
-        [self log:[NSString stringWithFormat:@"APP: %@", bid]];
-        if (dataPath) {
-            NSString *p = dataPath(bid);
-            [self log:[NSString stringWithFormat:@"  ruta: %@", p]];
-            if (p) {
-                if (hasLease) [self log:[NSString stringWithFormat:@"  lease activa: %d", hasLease(p)]];
-                [self listar:p];
-            }
-        }
+    NSString *p = dataPath(bid);
+    [self log:[NSString stringWithFormat:@"APP: %@", bid]];
+    [self log:[NSString stringWithFormat:@"  ruta: %@", p ?: @"(sin ruta)"]];
+    if (p) {
+        if (hasLease) [self log:[NSString stringWithFormat:@"  lease: %d", hasLease(p)]];
+        [self listar:p];
     }
 }
 
