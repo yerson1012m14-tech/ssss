@@ -1,5 +1,8 @@
 #import "ViewController.h"
 #import <mach-o/dyld.h>
+#import <mach-o/loader.h>
+#import <mach-o/nlist.h>
+#import <string.h>
 #import <objc/runtime.h>
 
 @interface ViewController ()
@@ -22,9 +25,8 @@
     [self.view addSubview:self.logView];
 
     UIButton *btn1 = [self boton:@"1. Ver mi sandbox" accion:@selector(verSandbox)];
-    UIButton *btn2 = [self boton:@"2. Probar acceso" accion:@selector(probarMotor)];
+    UIButton *btn2 = [self boton:@"2. Funciones del motor" accion:@selector(verSimbolos)];
     UIButton *btn3 = [self boton:@"3. Diagnostico" accion:@selector(diagnostico)];
-    UIButton *btn4 = [self boton:@"4. Escanear motor" accion:@selector(escanearMotor)];
 
     [NSLayoutConstraint activateConstraints:@[
         [btn1.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
@@ -39,17 +41,13 @@
         [btn3.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
         [btn3.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
         [btn3.heightAnchor constraintEqualToConstant:36],
-        [btn4.topAnchor constraintEqualToAnchor:btn3.bottomAnchor constant:6],
-        [btn4.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
-        [btn4.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
-        [btn4.heightAnchor constraintEqualToConstant:36],
-        [self.logView.topAnchor constraintEqualToAnchor:btn4.bottomAnchor constant:8],
+        [self.logView.topAnchor constraintEqualToAnchor:btn3.bottomAnchor constant:8],
         [self.logView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
         [self.logView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
         [self.logView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10]
     ]];
 
-    [self log:@"App V4 iniciada."];
+    [self log:@"App V5 iniciada."];
 }
 
 - (UIButton *)boton:(NSString *)titulo accion:(SEL)accion {
@@ -74,11 +72,6 @@
     [self listar:docs];
 }
 
-- (void)probarMotor {
-    [self log:@"--- Probar acceso ---"];
-    [self listar:@"/private/var/mobile/Containers/Data/Application"];
-}
-
 - (void)diagnostico {
     [self log:@"--- Diagnostico ---"];
     uint32_t n = _dyld_image_count();
@@ -88,41 +81,42 @@
     }
 }
 
-- (void)escanearMotor {
-    [self log:@"--- Clases del motor en memoria ---"];
-    int count = objc_getClassList(NULL, 0);
-    Class *classes = (Class *)malloc(sizeof(Class) * count);
-    objc_getClassList(classes, count);
-    int encontrados = 0;
+- (void)verSimbolos {
+    [self log:@"--- Funciones del motor ---"];
+    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+        const char *iname = _dyld_get_image_name(i);
+        if (!strstr(iname, "FilzaApplySandboxExt")) continue;
 
-    for (int i = 0; i < count; i++) {
-        NSString *name = NSStringFromClass(classes[i]);
-        if ([name containsString:@"MCM"] || [name containsString:@"Filza"] ||
-            [name containsString:@"Sandbox"] || [name containsString:@"Poster"] ||
-            [name containsString:@"Bridge"]) {
-            encontrados++;
-            [self log:[NSString stringWithFormat:@"CLASE: %@", name]];
+        const struct mach_header_64 *h = (const struct mach_header_64 *)_dyld_get_image_header(i);
+        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        const struct symtab_command *sym = NULL;
+        const struct segment_command_64 *le = NULL;
+        const struct load_command *lc = (const struct load_command *)((const uint8_t *)h + sizeof(struct mach_header_64));
 
-            unsigned int mcount = 0;
-            Method *methods = class_copyMethodList(classes[i], &mcount);
-            for (unsigned int m = 0; m < mcount; m++) {
-                [self log:[NSString stringWithFormat:@"   - %@", NSStringFromSelector(method_getName(methods[m]))]];
+        for (uint32_t c = 0; c < h->ncmds; c++) {
+            if (lc->cmd == LC_SYMTAB) sym = (const struct symtab_command *)lc;
+            else if (lc->cmd == LC_SEGMENT_64) {
+                const struct segment_command_64 *sg = (const struct segment_command_64 *)lc;
+                if (strcmp(sg->segname, "__LINKEDIT") == 0) le = sg;
             }
-            free(methods);
+            lc = (const struct load_command *)((const uint8_t *)lc + lc->cmdsize);
+        }
+        if (!sym || !le) { [self log:@"(sin tabla de simbolos)"]; return; }
 
-            unsigned int ccount = 0;
-            Method *cmethods = class_copyMethodList(object_getClass(classes[i]), &ccount);
-            for (unsigned int m = 0; m < ccount; m++) {
-                NSString *sel = NSStringFromSelector(method_getName(cmethods[m]));
-                if (![sel hasPrefix:@"load"] && ![sel hasPrefix:@"initialize"]) {
-                    [self log:[NSString stringWithFormat:@"   + %@", sel]];
-                }
+        uintptr_t base = (uintptr_t)(le->vmaddr + slide - le->fileoff);
+        const struct nlist_64 *nl = (const struct nlist_64 *)(base + sym->symoff);
+        const char *str = (const char *)(base + sym->stroff);
+
+        int mostrados = 0;
+        for (uint32_t s = 0; s < sym->nsyms; s++) {
+            if ((nl[s].n_type & N_TYPE) == N_SECT && nl[s].n_value != 0) {
+                const char *name = str + nl[s].n_un.n_strx;
+                if (name[0] != '_') continue;
+                [self log:[NSString stringWithUTF8String:name]];
+                if (++mostrados > 250) { [self log:@"... (truncado)"]; break; }
             }
-            free(cmethods);
         }
     }
-    free(classes);
-    if (!encontrados) [self log:@"(ninguna clase del motor encontrada)"];
 }
 
 - (void)listar:(NSString *)ruta {
