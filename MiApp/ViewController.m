@@ -3,21 +3,139 @@
 #import <string.h>
 #import <dlfcn.h>
 
-@interface ViewController () <UITextFieldDelegate>
-@property (nonatomic, strong) UITextView *logView;
-@property (nonatomic, strong) UITextField *campo;
-@property (nonatomic, assign) BOOL motorOn;
+static void asegurarMotor(void) {
+    static BOOL on = NO;
+    if (on) return;
+    on = YES;
+    void (*tweakInit)(void) = dlsym(RTLD_DEFAULT, "TweakInit");
+    int (*start)(void) = dlsym(RTLD_DEFAULT, "MCMFilzaStart");
+    void (*setUnres)(int) = dlsym(RTLD_DEFAULT, "MCMFilzaSetUnrestrictedFilesystem");
+    if (tweakInit) tweakInit();
+    if (start) start();
+    if (setUnres) setUnres(1);
+}
+
+static NSString *containerPath(NSString *bid) {
+    NSString *(*dataPath)(NSString *) = dlsym(RTLD_DEFAULT, "MCMFilzaDataContainerPath");
+    return dataPath ? dataPath(bid) : nil;
+}
+
+#pragma mark - Visor de texto
+@interface TextViewVC : UIViewController
+@property (nonatomic, strong) NSString *ruta;
+@end
+@implementation TextViewVC
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor blackColor];
+    self.title = self.ruta.lastPathComponent;
+    UITextView *tv = [[UITextView alloc] initWithFrame:self.view.bounds];
+    tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    tv.editable = NO;
+    tv.textColor = [UIColor greenColor];
+    tv.backgroundColor = [UIColor blackColor];
+    tv.font = [UIFont fontWithName:@"Menlo" size:11];
+    NSData *d = [NSData dataWithContentsOfFile:self.ruta];
+    NSString *s = d ? [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] : nil;
+    tv.text = s ?: [NSString stringWithFormat:@"(binario, %lu bytes)", (unsigned long)d.length];
+    [self.view addSubview:tv];
+}
 @end
 
+#pragma mark - Navegador de carpetas
+@interface FileBrowserVC : UIViewController <UITableViewDataSource, UITableViewDelegate>
+@property (nonatomic, strong) NSString *ruta;
+@property (nonatomic, strong) NSArray *items;
+@property (nonatomic, strong) UITableView *tv;
+@end
+@implementation FileBrowserVC
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor blackColor];
+    self.title = self.ruta.lastPathComponent;
+    self.tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
+    self.tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.tv.backgroundColor = [UIColor blackColor];
+    self.tv.dataSource = self;
+    self.tv.delegate = self;
+    [self.tv registerClass:[UITableViewCell class] forCellReuseIdentifier:@"c"];
+    [self.view addSubview:self.tv];
+    [self recargar];
+}
+- (void)recargar {
+    NSMutableArray *dirs = [NSMutableArray new], *files = [NSMutableArray new];
+    NSArray *all = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.ruta error:nil];
+    for (NSString *n in [all sortedArrayUsingSelector:@selector(localizedStandardCompare:)]) {
+        BOOL isDir = NO;
+        [[NSFileManager defaultManager] fileExistsAtPath:[self.ruta stringByAppendingPathComponent:n] isDirectory:&isDir];
+        [(isDir ? dirs : files) addObject:n];
+    }
+    NSMutableArray *fin = [NSMutableArray new];
+    if (![self.ruta isEqualToString:@"/"]) [fin addObject:@".."];
+    [fin addObjectsFromArray:dirs];
+    [fin addObjectsFromArray:files];
+    self.items = fin;
+    [self.tv reloadData];
+}
+- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return self.items.count; }
+- (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
+    UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"c" forIndexPath:ip];
+    c.backgroundColor = [UIColor blackColor];
+    NSString *n = self.items[ip.row];
+    BOOL esDir = [n isEqualToString:@".."] || ![[n pathExtension].length boolValue] && [self esDir:n];
+    c.textLabel.text = n;
+    c.textLabel.textColor = [self esDir:n] || [n isEqualToString:@".."] ? [UIColor cyanColor] : [UIColor lightGrayColor];
+    c.textLabel.font = [UIFont fontWithName:@"Menlo" size:12];
+    return c;
+}
+- (BOOL)esDir:(NSString *)n {
+    BOOL isDir = NO;
+    [[NSFileManager defaultManager] fileExistsAtPath:[self.ruta stringByAppendingPathComponent:n] isDirectory:&isDir];
+    return isDir;
+}
+- (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip {
+    [t deselectRowAtIndexPath:ip animated:YES];
+    NSString *n = self.items[ip.row];
+    if ([n isEqualToString:@".."]) { [self.navigationController popViewControllerAnimated:YES]; return; }
+    NSString *full = [self.ruta stringByAppendingPathComponent:n];
+    if ([self esDir:n]) {
+        FileBrowserVC *fb = [FileBrowserVC new];
+        fb.ruta = full;
+        [self.navigationController pushViewController:fb animated:YES];
+    } else {
+        TextViewVC *tv = [TextViewVC new];
+        tv.ruta = full;
+        [self.navigationController pushViewController:tv animated:YES];
+    }
+}
+@end
+
+#pragma mark - Pantalla principal: lista de apps
+@interface ViewController () <UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate>
+@property (nonatomic, strong) UITableView *tv;
+@property (nonatomic, strong) UITextField *campo;
+@property (nonatomic, strong) NSMutableArray *apps;
+@end
 @implementation ViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
-    self.title = @"Mi File Manager";
+    self.title = @"MiFilza";
+    asegurarMotor();
 
-    self.campo = [[UITextField alloc] init];
-    self.campo.placeholder = @"com.ejemplo.app y pulsa return";
+    self.apps = [NSMutableArray new];
+    self.tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
+    self.tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.tv.backgroundColor = [UIColor blackColor];
+    self.tv.dataSource = self;
+    self.tv.delegate = self;
+    [self.tv registerClass:[UITableViewCell class] forCellReuseIdentifier:@"c"];
+
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 44)];
+    header.backgroundColor = [UIColor blackColor];
+    self.campo = [[UITextField alloc] initWithFrame:CGRectMake(10, 4, header.bounds.size.width - 20, 36)];
+    self.campo.placeholder = @"bundle id manual + return";
     self.campo.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
     self.campo.textColor = [UIColor whiteColor];
     self.campo.font = [UIFont fontWithName:@"Menlo" size:12];
@@ -26,138 +144,72 @@
     self.campo.autocorrectionType = UITextAutocorrectionTypeNo;
     self.campo.returnKeyType = UIReturnKeyDone;
     self.campo.delegate = self;
-    UIView *pad = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 8)];
-    self.campo.leftView = pad;
-    self.campo.leftViewMode = UITextFieldViewModeAlways;
-    self.campo.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.campo];
+    [header addSubview:self.campo];
+    self.tv.tableHeaderView = header;
+    [self.view addSubview:self.tv];
 
-    self.logView = [[UITextView alloc] init];
-    self.logView.editable = NO;
-    self.logView.textColor = [UIColor greenColor];
-    self.logView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1.0];
-    self.logView.font = [UIFont fontWithName:@"Menlo" size:11];
-    self.logView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.logView];
-
-    UIButton *btn1 = [self boton:@"1. ARRANCAR MOTOR" accion:@selector(arrancarMotor)];
-    UIButton *btn2 = [self boton:@"2. Probar apps del sistema" accion:@selector(probarSistema)];
-    UIButton *btn3 = [self boton:@"3. Abrir ID escrito" accion:@selector(abrirEscrito)];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [self.campo.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [self.campo.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
-        [self.campo.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
-        [self.campo.heightAnchor constraintEqualToConstant:36],
-        [btn1.topAnchor constraintEqualToAnchor:self.campo.bottomAnchor constant:6],
-        [btn1.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
-        [btn1.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
-        [btn1.heightAnchor constraintEqualToConstant:36],
-        [btn2.topAnchor constraintEqualToAnchor:btn1.bottomAnchor constant:6],
-        [btn2.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
-        [btn2.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
-        [btn2.heightAnchor constraintEqualToConstant:36],
-        [btn3.topAnchor constraintEqualToAnchor:btn2.bottomAnchor constant:6],
-        [btn3.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
-        [btn3.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
-        [btn3.heightAnchor constraintEqualToConstant:36],
-        [self.logView.topAnchor constraintEqualToAnchor:btn3.bottomAnchor constant:8],
-        [self.logView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:10],
-        [self.logView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-10],
-        [self.logView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10]
-    ]];
-
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cerrarTeclado)];
-    [self.view addGestureRecognizer:tap];
-
-    [self log:@"App V9. Escribe un ID y pulsa return."];
+    [self cargarApps];
 }
 
-- (UIButton *)boton:(NSString *)titulo accion:(SEL)accion {
-    UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
-    [b setTitle:titulo forState:UIControlStateNormal];
-    [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    b.backgroundColor = [UIColor darkGrayColor];
-    b.translatesAutoresizingMaskIntoConstraints = NO;
-    [b addTarget:self action:accion forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:b];
-    return b;
-}
+- (void)cargarApps {
+    NSMutableOrderedSet *set = [NSMutableOrderedSet new];
+    // Descubrimiento real: apps instaladas segun el sistema
+    Class ws = NSClassFromString(@"LSApplicationWorkspace");
+    if (ws) {
+        id workspace = [ws performSelector:@selector(defaultWorkspace)];
+        NSArray *all = [workspace performSelector:@selector(allApplications)];
+        for (id proxy in all) {
+            NSString *bid = [proxy performSelector:@selector(applicationIdentifier)];
+            if (bid && ![bid hasPrefix:@"com.apple."]) [set addObject:bid];
+        }
+    }
+    // Refuerzo: populares por si el sistema oculta alguna
+    NSArray *pop = @[@"com.google.ios.youtube", @"net.whatsapp.WhatsApp", @"com.instagram.instagram",
+                     @"com.zhiliaoapp.musically", @"com.spotify.client", @"com.facebook.Facebook",
+                     @"com.snapchat.snapchat", @"ru.keepcoder.Telegram"];
+    for (NSString *b in pop) [set addObject:b];
 
-- (void)cerrarTeclado { [self.view endEditing:YES]; }
+    [self.apps addObjectsFromArray:[set array]];
+    [self.apps sortUsingSelector:@selector(localizedStandardCompare:)];
+    [self.tv reloadData];
+}
 
 - (BOOL)textFieldShouldReturn:(UITextField *)tf {
     [tf resignFirstResponder];
-    [self asegurarMotor];
-    [self abrirEscrito];
+    [self abrirContenedor:tf.text];
     return YES;
 }
 
-- (void)asegurarMotor {
-    if (!self.motorOn) { [self arrancarMotor]; self.motorOn = YES; }
+- (NSInteger)tableView:(UITableView *)t numberOfRowsInSection:(NSInteger)s { return self.apps.count; }
+- (UITableViewCell *)tableView:(UITableView *)t cellForRowAtIndexPath:(NSIndexPath *)ip {
+    UITableViewCell *c = [t dequeueReusableCellWithIdentifier:@"c" forIndexPath:ip];
+    c.backgroundColor = [UIColor blackColor];
+    c.textLabel.text = self.apps[ip.row];
+    c.textLabel.textColor = [UIColor greenColor];
+    c.textLabel.font = [UIFont fontWithName:@"Menlo" size:12];
+    return c;
 }
-
-- (void)log:(NSString *)texto {
-    self.logView.text = [self.logView.text stringByAppendingFormat:@"%@\n", texto];
-    [self.logView scrollRangeToVisible:NSMakeRange(self.logView.text.length - 1, 1)];
-}
-
-- (void)arrancarMotor {
-    [self log:@"--- Arrancando motor ---"];
-    void (*tweakInit)(void) = dlsym(RTLD_DEFAULT, "TweakInit");
-    int (*start)(void) = dlsym(RTLD_DEFAULT, "MCMFilzaStart");
-    void (*setUnres)(int) = dlsym(RTLD_DEFAULT, "MCMFilzaSetUnrestrictedFilesystem");
-    if (!start) { [self log:@"[!!] motor no encontrado"]; return; }
-    if (tweakInit) tweakInit();
-    start();
-    if (setUnres) setUnres(1);
-    [self log:@"Motor arrancado."];
-}
-
-- (void)probarSistema {
-    [self log:@"--- Apps del sistema ---"];
-    [self asegurarMotor];
-    NSArray *ids = @[
-        @"com.apple.mobilesafari",
-        @"com.apple.mobileslideshow",
-        @"com.apple.mobilemail",
-        @"com.apple.music",
-        @"com.apple.Preferences"
-    ];
-    for (NSString *bid in ids) [self abrirContenedor:bid];
-}
-
-- (void)abrirEscrito {
-    NSString *bid = [self.campo.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-    if (bid.length) [self abrirContenedor:bid];
-    else [self log:@"Escribe un bundle id primero."];
+- (void)tableView:(UITableView *)t didSelectRowAtIndexPath:(NSIndexPath *)ip {
+    [t deselectRowAtIndexPath:ip animated:YES];
+    [self abrirContenedor:self.apps[ip.row]];
 }
 
 - (void)abrirContenedor:(NSString *)bid {
-    NSString *(*dataPath)(NSString *) = dlsym(RTLD_DEFAULT, "MCMFilzaDataContainerPath");
-    int (*hasLease)(NSString *) = dlsym(RTLD_DEFAULT, "MCMFilzaPathHasActiveLease");
-    if (!dataPath) { [self log:@"[!!] falta dataPath"]; return; }
-
-    NSString *p = dataPath(bid);
-    [self log:[NSString stringWithFormat:@"APP: %@", bid]];
-    [self log:[NSString stringWithFormat:@"  ruta: %@", p ?: @"(sin ruta)"]];
-    if (p) {
-        if (hasLease) [self log:[NSString stringWithFormat:@"  lease: %d", hasLease(p)]];
-        [self listar:p];
+    bid = [bid stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    if (!bid.length) return;
+    NSString *p = containerPath(bid);
+    if (!p) {
+        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Sin contenedor"
+            message:[NSString stringWithFormat:@"%@ no devolvio ruta (¿instalada?)", bid]
+            preferredStyle:UIAlertControllerStyleAlert];
+        [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:a animated:YES completion:nil];
+        return;
     }
-}
-
-- (void)listar:(NSString *)ruta {
-    NSError *err = nil;
-    NSArray *items = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:ruta error:&err];
-    if (items) {
-        [self log:[NSString stringWithFormat:@"  [%lu archivos]", (unsigned long)items.count]];
-        for (NSString *item in [items subarrayWithRange:NSMakeRange(0, MIN(items.count, 8))]) {
-            [self log:[NSString stringWithFormat:@"   - %@", item]];
-        }
-    } else {
-        [self log:[NSString stringWithFormat:@"  [ERROR] %@", err.localizedDescription]];
-    }
+    FileBrowserVC *fb = [FileBrowserVC new];
+    fb.ruta = p;
+    fb.title = bid;
+    [self.navigationController pushViewController:fb animated:YES];
 }
 
 @end
