@@ -110,7 +110,7 @@ static NSString *containerPath(NSString *bid) {
 }
 @end
 
-#pragma mark - Pantalla principal: lista de apps
+#pragma mark - Pantalla principal
 @interface ViewController () <UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate>
 @property (nonatomic, strong) UITableView *tv;
 @property (nonatomic, strong) UITextField *campo;
@@ -122,7 +122,6 @@ static NSString *containerPath(NSString *bid) {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor blackColor];
     self.title = @"MiFilza";
-    asegurarMotor();
 
     self.apps = [NSMutableArray new];
     self.tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
@@ -153,15 +152,25 @@ static NSString *containerPath(NSString *bid) {
 
 - (void)cargarApps {
     NSMutableOrderedSet *set = [NSMutableOrderedSet new];
-    Class ws = NSClassFromString(@"LSApplicationWorkspace");
-    if (ws) {
-        id workspace = [ws performSelector:@selector(defaultWorkspace)];
-        NSArray *all = [workspace performSelector:@selector(allApplications)];
-        for (id proxy in all) {
-            NSString *bid = [proxy performSelector:@selector(applicationIdentifier)];
-            if (bid && ![bid hasPrefix:@"com.apple."]) [set addObject:bid];
+
+    @try {
+        Class ws = NSClassFromString(@"LSApplicationWorkspace");
+        if (ws && [ws respondsToSelector:@selector(defaultWorkspace)]) {
+            id workspace = [ws performSelector:@selector(defaultWorkspace)];
+            if (workspace && [workspace respondsToSelector:@selector(allApplications)]) {
+                NSArray *all = [workspace performSelector:@selector(allApplications)];
+                for (id proxy in all) {
+                    @try {
+                        if ([proxy respondsToSelector:@selector(applicationIdentifier)]) {
+                            NSString *bid = [proxy performSelector:@selector(applicationIdentifier)];
+                            if (bid && ![bid hasPrefix:@"com.apple."]) [set addObject:bid];
+                        }
+                    } @catch (NSException *e) {}
+                }
+            }
         }
-    }
+    } @catch (NSException *e) {}
+
     NSArray *pop = @[@"com.google.ios.youtube", @"net.whatsapp.WhatsApp", @"com.instagram.instagram",
                      @"com.zhiliaoapp.musically", @"com.spotify.client", @"com.facebook.Facebook",
                      @"com.snapchat.snapchat", @"ru.keepcoder.Telegram"];
@@ -169,6 +178,7 @@ static NSString *containerPath(NSString *bid) {
 
     [self.apps addObjectsFromArray:[set array]];
     [self.apps sortUsingSelector:@selector(localizedStandardCompare:)];
+    self.title = [NSString stringWithFormat:@"MiFilza (%lu apps)", (unsigned long)self.apps.count];
     [self.tv reloadData];
 }
 
@@ -195,7 +205,12 @@ static NSString *containerPath(NSString *bid) {
 - (void)abrirContenedor:(NSString *)bid {
     bid = [bid stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (!bid.length) return;
-    NSString *p = containerPath(bid);
+
+    asegurarMotor();
+
+    NSString *p = nil;
+    @try { p = containerPath(bid); } @catch (NSException *e) { p = nil; }
+
     if (!p) {
         UIAlertController *a = [UIAlertController alertControllerWithTitle:@"Sin contenedor"
             message:[NSString stringWithFormat:@"%@ no devolvio ruta (no instalada?)", bid]
@@ -204,9 +219,4 @@ static NSString *containerPath(NSString *bid) {
         [self presentViewController:a animated:YES completion:nil];
         return;
     }
-    FileBrowserVC *fb = [FileBrowserVC new];
-    fb.ruta = p;
-    [self.navigationController pushViewController:fb animated:YES];
-}
-
-@end
+    FileBrowserVC *fb =
