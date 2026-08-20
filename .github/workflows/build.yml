@@ -89,20 +89,8 @@ jobs:
           mv Payload/MiApp.app/MiApp_patched Payload/MiApp.app/MiApp
           chmod +x Payload/MiApp.app/MiApp
 
-          # Crear entitlements
-          cat > entitlements.plist << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>com.apple.security.app-sandbox</key>
-  <false/>
-</dict>
-</plist>
-PLIST
-
-          # Firmar
-          ldid -S entitlements.plist Payload/MiApp.app/MiApp
+          # Firmar con ldid
+          ldid -S Payload/MiApp.app/MiApp
 
           echo "=== Contenido del bundle ==="
           ls -la Payload/MiApp.app/
