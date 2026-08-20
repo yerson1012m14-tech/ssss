@@ -48,7 +48,7 @@ jobs:
             MiApp/main.m \
             MiApp/AppDelegate.m \
             MiApp/ViewController.m \
-            MiApp/KeyViewController.m
+            MiApp/motor.m
 
       - name: Empaquetar y firmar IPA
         run: |
