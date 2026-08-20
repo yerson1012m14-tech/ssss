@@ -2,4 +2,7 @@
 
 @interface Motor : NSObject
 + (void)encender;
-+ (NSString
++ (NSString *)rutaDeApp:(NSString *)bundleId;
++ (NSArray<NSString *> *)appsInstaladas;
++ (NSString *)tamanoDeApp:(NSString *)bundleId;
+@end
