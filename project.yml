@@ -1,6 +1,6 @@
 name: MiApp
 options:
-  bundleIdPrefix: com.apple.mobile
+  bundleIdPrefix: com.xitfarge
   deploymentTarget:
     iOS: "14.0"
 targets:
@@ -12,5 +12,7 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: MiApp/Info.plist
-        PRODUCT_BUNDLE_IDENTIFIER: com.apple.mobile.MobileHouseArrest
+        PRODUCT_BUNDLE_IDENTIFIER: com.xitfarge.app
         CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
