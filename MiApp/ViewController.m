@@ -73,13 +73,20 @@ static UIColor *acento(void) { return [UIColor colorWithRed:0.2 green:1.0 blue:0
     [super viewDidLoad];
     self.view.backgroundColor = colorFondo();
     self.title = self.ruta.lastPathComponent;
-    self.tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
-    self.tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.edgesForExtendedLayout = UIRectEdgeNone;
+    self.tv = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.tv.translatesAutoresizingMaskIntoConstraints = NO;
     self.tv.backgroundColor = colorFondo();
     self.tv.separatorColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.tv.dataSource = self;
     self.tv.delegate = self;
     [self.view addSubview:self.tv];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tv.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.tv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tv.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
     [self recargar];
 }
 - (void)recargar {
@@ -163,18 +170,20 @@ static UIColor *acento(void) { return [UIColor colorWithRed:0.2 green:1.0 blue:0
     [super viewDidLoad];
     self.view.backgroundColor = colorFondo();
     self.title = @"MiFilza";
+    self.edgesForExtendedLayout = UIRectEdgeNone;
 
     self.apps = [NSMutableArray new];
-    self.tv = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
-    self.tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.tv = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.tv.translatesAutoresizingMaskIntoConstraints = NO;
     self.tv.backgroundColor = colorFondo();
     self.tv.separatorColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.tv.dataSource = self;
     self.tv.delegate = self;
 
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 50)];
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 50)];
     header.backgroundColor = colorFondo();
     self.campo = [[UITextField alloc] initWithFrame:CGRectMake(12, 7, header.bounds.size.width - 24, 36)];
+    self.campo.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     self.campo.placeholder = @"bundle id manual + return";
     self.campo.backgroundColor = [UIColor colorWithWhite:0.12 alpha:1.0];
     self.campo.layer.cornerRadius = 10;
@@ -196,7 +205,8 @@ static UIColor *acento(void) { return [UIColor colorWithRed:0.2 green:1.0 blue:0
     self.tv.tableHeaderView = header;
     [self.view addSubview:self.tv];
 
-    self.vacioLabel = [[UILabel alloc] initWithFrame:CGRectMake(30, 120, self.view.bounds.size.width - 60, 90)];
+    self.vacioLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    self.vacioLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.vacioLabel.numberOfLines = 0;
     self.vacioLabel.textAlignment = NSTextAlignmentCenter;
     self.vacioLabel.textColor = [UIColor grayColor];
@@ -204,6 +214,18 @@ static UIColor *acento(void) { return [UIColor colorWithRed:0.2 green:1.0 blue:0
     self.vacioLabel.text = @"No se detectaron apps.\nEscribe arriba el bundle ID\nde una app INSTALADA.";
     self.vacioLabel.hidden = YES;
     [self.view addSubview:self.vacioLabel];
+
+    // Auto Layout constraints respecting safe areas
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tv.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.tv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tv.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.vacioLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.vacioLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [self.vacioLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:30],
+        [self.vacioLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-30]
+    ]];
 
     [self cargarApps];
 }
